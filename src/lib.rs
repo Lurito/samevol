@@ -3,47 +3,57 @@ use std::ffi::OsStr;
 use std::io;
 use std::os::windows::ffi::OsStrExt;
 use std::ptr;
+use std::sync::{Arc, Mutex};
+
+lazy_static::lazy_static! {
+    static ref VOLUME_MAP: Arc<Mutex<HashMap<String, String>>> = {
+        Arc::new(Mutex::new(
+            build_volume_map().unwrap_or_else(|e| {
+                eprintln!("Failed to initialize volume map: {}", e);
+                HashMap::new()
+            })
+        ))
+    };
+}
 
 mod winapi {
     #[link(name = "kernel32")]
     unsafe extern "system" {
-        // GetLogicalDriveStringsW
-        pub fn GetLogicalDriveStringsW(
-            n_buffer_length: u32,
-            lp_buffer: *mut u16,
-        ) -> u32;
+        // Volume Management API
+        pub fn FindFirstVolumeW(
+            lpsz_volume_name: *mut u16,
+            cch_buffer_length: u32,
+        ) -> *mut std::ffi::c_void;
 
-        // QueryDosDeviceW
-        pub fn QueryDosDeviceW(
-            lp_device_name: *const u16,
-            lp_target_path: *mut u16,
-            ucch_max: u32,
-        ) -> u32;
-
-        // GetVolumePathNameW
-        pub fn GetVolumePathNameW(
-            lpsz_path_name: *const u16,
-            lpsz_volume_path_name: *mut u16,
+        pub fn FindNextVolumeW(
+            h_find_volume: *mut std::ffi::c_void,
+            lpsz_volume_name: *mut u16,
             cch_buffer_length: u32,
         ) -> i32;
 
-        // GetFullPathNameW
+        pub fn FindVolumeClose(h_find_volume: *mut std::ffi::c_void) -> i32;
+
+        pub fn GetVolumePathNamesForVolumeNameW(
+            lpsz_volume_name: *const u16,
+            lpsz_volume_path_names: *mut u16,
+            cch_buffer_length: u32,
+            pcch_return_length: *mut u32,
+        ) -> i32;
+
+        // Path Resolution API
         pub fn GetFullPathNameW(
             lp_file_name: *const u16,
             n_buffer_length: u32,
             lp_buffer: *mut u16,
             lp_file_part: *mut *mut u16,
         ) -> u32;
-    }
-}
 
-lazy_static::lazy_static! {
-    static ref MOUNT_POINTS: HashMap<String, String> = {
-        get_mount_points().unwrap_or_else(|e| {
-            eprintln!("Failed to initialize mount points: {}", e);
-            HashMap::new()
-        })
-    };
+        pub fn GetVolumePathNameW(
+            lpsz_file_name: *const u16,
+            lpsz_volume_path_name: *mut u16,
+            cch_buffer_length: u32,
+        ) -> i32;
+    }
 }
 
 type WinResult<T> = Result<T, io::Error>;
@@ -52,127 +62,160 @@ fn wide_string(s: &str) -> Vec<u16> {
     OsStr::new(s).encode_wide().chain(Some(0)).collect()
 }
 
-fn from_wide_ptr(ptr: *const u16) -> WinResult<String> {
-    let mut len = 0;
-    while unsafe { *ptr.add(len) } != 0 {
-        len += 1;
-    }
-
-    let slice = unsafe { std::slice::from_raw_parts(ptr, len) };
-    String::from_utf16(slice)
-        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid UTF-16 sequence"))
+fn from_wide_buf(buffer: &[u16]) -> WinResult<String> {
+    let end = buffer.iter().position(|&c| c == 0).unwrap_or(buffer.len());
+    String::from_utf16(&buffer[..end])
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "UTF-16 conversion failed"))
 }
 
-fn get_mount_points() -> WinResult<HashMap<String, String>> {
-    let mut mount_points = HashMap::new();
+fn build_volume_map() -> WinResult<HashMap<String, String>> {
+    let mut volume_map = HashMap::new();
+    
+    /* 
+     * 卷名的GUID格式为`\\?\Volume{xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}\`，
+     * 其中：
+     * - `\\?\` 前缀占4字符
+     * - `Volume{` 固定部分占7字符
+     * - GUID部分占36字符
+     * - `}\` 后缀占2字符
+     * - Null终止符占1字符
+     * 总计：4 + 7 + 36 + 2 + 1 = 50个宽字符（u16）。
+     * 因此，缓冲区大小必须至少为50，以完整存储卷名。
+     */
+    let mut buffer = [0u16; 50]; 
 
-    // 获取逻辑驱动器字符串长度
-    let required_size = unsafe { winapi::GetLogicalDriveStringsW(0, ptr::null_mut()) };
-    if required_size == 0 {
+    // 开始卷枚举
+    let handle = unsafe { winapi::FindFirstVolumeW(buffer.as_mut_ptr(), buffer.len() as u32) };
+    if handle.is_null() {
         return Err(io::Error::last_os_error());
     }
 
-    // 分配缓冲区
-    let mut buffer = vec![0u16; required_size as usize];
-    let result = unsafe {
-        winapi::GetLogicalDriveStringsW(
-            buffer.len() as u32,
-            buffer.as_mut_ptr()
-        )
-    };
+    loop {
+        let volume_name = from_wide_buf(&buffer)?;
 
-    if result == 0 {
-        return Err(io::Error::last_os_error());
-    }
-
-    // 解析驱动器列表
-    let mut current = 0;
-    while current < buffer.len() {
-        let start = current;
-        while buffer[current] != 0 {
-            current += 1;
-        }
-        if start == current {
-            break;
-        }
-
-        let drive_wide = &buffer[start..current];
-        let drive_str = String::from_utf16(drive_wide)
-            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid drive string"))?;
-
-        // 查询设备路径
-        let device_name = wide_string(&drive_str[..2]); // 提取类似 "C:"
-        let mut device_path = [0u16; 2048];
-        let result = unsafe {
-            winapi::QueryDosDeviceW(
-                device_name.as_ptr(),
-                device_path.as_mut_ptr(),
-                device_path.len() as u32
+        // 获取卷的挂载点路径
+        let mut paths_buffer = [0u16; 4096];
+        let mut returned_len = 0;
+        let success = unsafe {
+            winapi::GetVolumePathNamesForVolumeNameW(
+                buffer.as_ptr(),
+                paths_buffer.as_mut_ptr(),
+                paths_buffer.len() as u32,
+                &mut returned_len,
             )
         };
 
-        if result == 0 {
-            let err = io::Error::last_os_error();
-            eprintln!("Failed to query device for {}: {}", drive_str, err);
-            continue;
+        if success != 0 && returned_len > 0 {
+            let mut offset = 0;
+            while offset < paths_buffer.len() {
+                if paths_buffer[offset] == 0 {
+                    break;
+                }
+
+                let end = paths_buffer[offset..]
+                    .iter()
+                    .position(|&c| c == 0)
+                    .unwrap_or(paths_buffer.len() - offset);
+                let path = from_wide_buf(&paths_buffer[offset..offset + end])?;
+
+                // 规范化路径格式（统一反斜杠）
+                let normalized_path = path.replace('/', "\\");
+                if !normalized_path.ends_with('\\') {
+                    volume_map.insert(format!("{}\\", normalized_path), volume_name.clone());
+                } else {
+                    volume_map.insert(normalized_path, volume_name.clone());
+                }
+
+                offset += end + 1;
+            }
         }
 
-        let path = from_wide_ptr(device_path.as_ptr())?;
-        mount_points.insert(drive_str, path);
-        current += 1; // 跳过null终止符
+        // 继续枚举下一个卷
+        let next = unsafe {
+            buffer.fill(0);
+            winapi::FindNextVolumeW(handle, buffer.as_mut_ptr(), buffer.len() as u32)
+        };
+        if next == 0 {
+            break;
+        }
     }
 
-    Ok(mount_points)
+    unsafe { winapi::FindVolumeClose(handle) };
+    Ok(volume_map)
 }
 
 fn get_volume_mount_point(path: &str) -> WinResult<String> {
     let path_wide = wide_string(path);
+    let mut full_path = [0u16; 4096];
+    let mut mount_point = [0u16; 4096];
 
     // 获取绝对路径
-    let mut full_path = [0u16; 4096];
     let len = unsafe {
         winapi::GetFullPathNameW(
             path_wide.as_ptr(),
             full_path.len() as u32,
             full_path.as_mut_ptr(),
-            ptr::null_mut()
+            ptr::null_mut(),
         )
     };
-
     if len == 0 {
         return Err(io::Error::last_os_error());
     }
 
-    // 获取挂载点
-    let mut mount_point = [0u16; 4096];
+    // 获取挂载点路径
     let success = unsafe {
         winapi::GetVolumePathNameW(
             full_path.as_ptr(),
             mount_point.as_mut_ptr(),
-            mount_point.len() as u32
+            mount_point.len() as u32,
         )
     };
-
     if success == 0 {
         return Err(io::Error::last_os_error());
     }
 
-    from_wide_ptr(mount_point.as_ptr())
+    from_wide_buf(&mount_point).map(|s| {
+        if s.ends_with('\\') { s } else { format!("{}\\", s) }
+    })
+}
+
+/// 重新初始化卷映射表
+/// 返回操作结果（成功包含映射数量，失败包含错误信息）
+pub fn reinitialize_volume_map() -> Result<usize, io::Error> {
+    let new_map = build_volume_map()?;
+    let count = new_map.len();
+
+    // 获取锁并替换映射
+    let mut map = VOLUME_MAP.lock()
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Mutex poison error: {}", e)))?;
+
+    *map = new_map;
+    Ok(count)
 }
 
 pub fn is_same_vol(path1: &str, path2: &str) -> bool {
-    let mount_point1 = match get_volume_mount_point(path1) {
-        Ok(m) => m,
-        Err(_) => return false,
+    let resolve_volume = |path: &str| -> Option<String> {
+        let mount_point = match get_volume_mount_point(path) {
+            Ok(m) => m,
+            Err(_) => return None,
+        };
+
+        // 获取锁并访问映射表
+        let map = VOLUME_MAP.lock().ok()?;
+
+        // 查找最长匹配的挂载点路径
+        let candidates = map.keys()
+            .filter(|k| mount_point.starts_with(*k))
+            .collect::<Vec<_>>();
+        let mount_path = candidates.iter()
+            .max_by_key(|k| k.len())?;
+
+        // 获取对应的卷名
+        map.get(*mount_path).cloned()
     };
 
-    let mount_point2 = match get_volume_mount_point(path2) {
-        Ok(m) => m,
-        Err(_) => return false,
-    };
+    let vol1 = resolve_volume(path1);
+    let vol2 = resolve_volume(path2);
 
-    MOUNT_POINTS
-        .get(&mount_point1)
-        .and_then(|d1| MOUNT_POINTS.get(&mount_point2).map(|d2| d1 == d2))
-        .unwrap_or(false)
+    vol1.zip(vol2).is_some_and(|(v1, v2)| v1 == v2)
 }
