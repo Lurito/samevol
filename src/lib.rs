@@ -301,6 +301,16 @@ fn get_volume_mount_point(path: &str) -> WinResult<String> {
 ///
 /// # Notes
 /// This will lock the global volume map mutex during update.
+///
+/// # Example
+///
+/// ```rust
+/// use samevol::reinitialize_volume_map;
+/// 
+/// // After system storage configuration changes
+/// let count = reinitialize_volume_map().expect("Failed to refresh mappings");
+/// println!("Reloaded {} volume mappings", count);
+/// ```
 pub fn reinitialize_volume_map() -> Result<usize, io::Error> {
     let new_map = build_volume_map()?;
     let count = new_map.len();
@@ -326,6 +336,16 @@ pub fn reinitialize_volume_map() -> Result<usize, io::Error> {
 /// 1. Resolves each path's mount point
 /// 2. Finds the longest matching mount point path in the volume map
 /// 3. Compares the underlying volume GUIDs
+/// 
+/// # Example
+/// ```rust
+/// use samevol::is_same_vol;
+/// 
+/// let path1 = r"C:\Windows\System32";
+/// let path2 = r"D:\Data\test.txt";
+/// 
+/// println!("Same volume? {}", is_same_vol(path1, path2)); // false
+/// ```
 pub fn is_same_vol(path1: &str, path2: &str) -> bool {
     // 解析路径到卷GUID的闭包
     let resolve_volume = |path: &str| -> Option<String> {
