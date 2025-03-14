@@ -7,7 +7,7 @@
 
 > 使用中文的开发者可以跳转至下方的[中文文档](#同一存储卷检查器)。
 
-A lightweight Windows utility for determining if two paths reside on the same storage volume on Windows.
+A lightweight Windows utility for determining if two paths reside on the same storage volume.
 
 ## Features
 
@@ -72,7 +72,7 @@ AI usage notice: Portions of the codebase, comments, and documentation were writ
 [<img alt="docs.rs" src="https://img.shields.io/badge/docs.rs-samevol-66c2a5?style=for-the-badge&labelColor=555555&logo=docs.rs" height="20">](https://docs.rs/samevol)
 [<img alt="docs.rs" src="https://img.shields.io/crates/l/samevol?color=d22128&style=for-the-badge&logo=apache" height="20">](./LICENSE)
 
-轻量级 Windows 工具库，用于在 Windows 上检测两个路径是否位于同一存储卷。
+轻量级 Windows 工具库，用于检测两个路径是否位于同一存储卷。
 
 ## 功能特性
 

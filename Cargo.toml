@@ -1,17 +1,26 @@
 [package]
 name = "samevol"
-description = "A lightweight Windows utility for determining if two paths reside on the same storage volume on Windows."
+description = "A lightweight Windows utility for determining if two paths reside on the same storage volume. 轻量级 Windows 工具库，用于检测两个路径是否位于同一存储卷。"
 authors = ["爱佐 (Ayrzo) <ayrzo@lurito.cn>"]
 version = "0.1.0"
 edition = "2024"
 build = "build.rs"
 publish = true
 license = "Apache-2.0"
-license-file = "LICENSE"
+repository = "https://github.com/Lurito/samevol"
+documentation = "https://docs.rs/samevol"
+keywords = [
+    "windows",
+    "volume",
+    "filesystem",
+]
 
 [lib]
 name = "samevol"
 path = "src/lib.rs"
+
+[package.metadata.docs.rs]
+targets = ["x86_64-pc-windows-msvc"]
 
 [dependencies]
 lazy_static = "1.5"
