@@ -1,8 +1,13 @@
 [package]
 name = "samevol"
+description = "A lightweight Windows utility for determining if two paths reside on the same storage volume on Windows."
+authors = ["爱佐 (Ayrzo) <ayrzo@lurito.cn>"]
 version = "0.1.0"
 edition = "2024"
 build = "build.rs"
+publish = true
+license = "Apache-2.0"
+license-file = "LICENSE"
 
 [lib]
 name = "samevol"
