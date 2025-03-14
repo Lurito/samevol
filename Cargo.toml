@@ -1,0 +1,11 @@
+[package]
+name = "samevol"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "samevol"
+path = "src/lib.rs"
+
+[dependencies]
+lazy_static = "1.5"
