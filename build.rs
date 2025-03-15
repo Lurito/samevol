@@ -1,6 +1,7 @@
 fn main() {
-    // Check if the target OS is Windows, but allow docs.rs for building docs
-    if !cfg!(target_os = "windows") && std::env::var("DOCS_RS").is_err() {
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
+
+    if target_os != "windows" {
         panic!("This library only supports Windows.");
     }
 }
