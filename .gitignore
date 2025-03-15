@@ -1,2 +1,5 @@
 .idea
 /target
+
+# lib 不需要提交 Cargo.lock
+Cargo.lock
