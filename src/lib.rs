@@ -323,7 +323,7 @@ fn get_volume_mount_point(path: &str) -> WinResult<String> {
 ///
 /// ```rust
 /// use samevol::reinitialize_volume_map;
-/// 
+///
 /// // After system storage configuration changes
 /// let count = reinitialize_volume_map().expect("Failed to refresh mappings");
 /// println!("Reloaded {} volume mappings", count);
@@ -370,28 +370,8 @@ pub fn reinitialize_volume_map() -> Result<usize, io::Error> {
 /// - For relative paths, the current working directory is used as the base
 /// - The returned device path includes the `\\?\` prefix and trailing backslash
 pub fn resolve_device_path(path: &str) -> Option<String> {
-    use std::borrow::Cow;
-    use std::env;
-    use std::path::Path;
-
-    // 如果路径是相对的，获取当前工作目录并拼接为绝对路径
-    let abs_path: Cow<'_, str> = if Path::new(path).is_relative() {
-        // 获取当前工作目录
-        let current_dir = env::current_dir().ok()?;
-
-        // 拼接为绝对路径
-        let current_dir_string = current_dir.join(path).to_str()?.to_string();
-
-        println!("{}", current_dir_string);
-
-        // 使用 Cow::Owned 转移所有权，避免不必要的内存分配
-        Cow::Owned(current_dir_string)
-    } else { // 是绝对路径，可直接使用
-        path.into()
-    };
-
     // 获取挂载点路径
-    let mount_point = match get_volume_mount_point(&abs_path) {
+    let mount_point = match get_volume_mount_point(path) {
         Ok(m) => m,
         Err(_) => return None,
     };
@@ -425,14 +405,14 @@ pub fn resolve_device_path(path: &str) -> Option<String> {
 /// 1. Resolves each path's mount point
 /// 2. Finds the longest matching mount point path in the volume map
 /// 3. Compares the underlying device paths
-/// 
+///
 /// # Example
 /// ```rust
 /// use samevol::is_same_vol;
-/// 
+///
 /// let path1 = r"C:\Windows\System32";
 /// let path2 = r"D:\Data\test.txt";
-/// 
+///
 /// println!("Same volume? {}", is_same_vol(path1, path2)); // false
 /// ```
 pub fn is_same_vol(path1: &str, path2: &str) -> bool {
