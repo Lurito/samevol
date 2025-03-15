@@ -11,11 +11,11 @@ A lightweight Windows utility for determining if two paths reside on the same st
 
 ## Features
 
-- 🚀 Fast volume GUID comparison using Windows API
+- 🚀 Fast volume device path comparison using Windows API
 - 📌 Automatically handles path normalization and mount point resolution
 - 🔄 Built-in volume mapping cache with manual refresh
 - 🛡️ Safe error handling for invalid paths
-- 💽 Supports physical drives, VHD(X) mounts, and network paths (UNC)
+- 💽 Supports physical drives and VHD(X) mounts
 
 ## Installation
 
@@ -35,6 +35,17 @@ fn main() {
     let path2 = r"D:\Data\test.txt";
     
     println!("Same volume? {}", is_same_vol(path1, path2)); // false
+}
+```
+
+Resolves the device path of volume for a given path:
+```rust
+use samevol::resolve_device_path;
+
+fn main() {
+    let path = r"C:\Windows\System32\drivers\etc\hosts";
+    let device_path = resolve_device_path(path).expect("Failed to resolve volume");
+    println!("Device path: {}", device_path);
 }
 ```
 
@@ -76,11 +87,11 @@ AI usage notice: Portions of the codebase, comments, and documentation were writ
 
 ## 功能特性
 
-- 🚀 基于 Windows API 的快速卷 GUID 比较
+- 🚀 基于 Windows API 的快速卷设备路径比较
 - 📌 自动处理路径规范化和挂载点解析
 - 🔄 内置卷映射缓存支持手动刷新
 - 🛡️ 安全的无效路径错误处理
-- 💽 支持物理驱动器、VHD(X) 虚拟硬盘及网络路径 (UNC)
+- 💽 支持物理驱动器和 VHD(X) 虚拟硬盘
 
 ## 安装
 
@@ -100,6 +111,17 @@ fn main() {
     let path2 = r"D:\Data\test.txt";
     
     println!("是否同一卷? {}", is_same_vol(path1, path2)); // false
+}
+```
+
+解析某路径对应卷的设备路径:
+```rust
+use samevol::resolve_device_path;
+
+fn main() {
+    let path = r"C:\Windows\System32\drivers\etc\hosts";
+    let device_path = resolve_device_path(path).expect("Failed to resolve volume");
+    println!("设备路径: {}", device_path);
 }
 ```
 

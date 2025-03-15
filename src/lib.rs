@@ -16,15 +16,12 @@
  */
 
 use std::collections::HashMap;
-use std::ffi::OsStr;
 use std::io;
-use std::os::windows::ffi::OsStrExt as _;
-use std::ptr;
 use std::sync::{Arc, Mutex};
 
 // 使用lazy_static初始化全局卷映射表
 lazy_static::lazy_static! {
-    /// 全局卷映射表，存储挂载点路径到卷 GUID 的映射
+    /// 全局卷映射表，存储挂载点路径到卷设备路径的映射
     // 使用Arc<Mutex<>>实现线程安全访问
     static ref VOLUME_MAP: Arc<Mutex<HashMap<String, String>>> = {
         Arc::new(Mutex::new(
@@ -175,6 +172,9 @@ type WinResult<T> = Result<T, io::Error>;
 
 /// 将Rust字符串转换为Windows宽字符字符串
 fn wide_string(s: &str) -> Vec<u16> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt as _;
+
     OsStr::new(s)
         .encode_wide()  // 转换为 UTF-16 编码迭代器
         .chain(Some(0)) // 追加终止符
@@ -248,7 +248,7 @@ fn build_volume_map() -> WinResult<HashMap<String, String>> {
                     normalized_path
                 };
 
-                // 插入映射表（挂载点路径 -> 卷 GUID）
+                // 插入映射表（挂载点路径 -> 卷设备路径）
                 volume_map.insert(key, volume_name.clone());
 
                 offset += end + 1; // 移动到下一个路径
@@ -283,7 +283,7 @@ fn get_volume_mount_point(path: &str) -> WinResult<String> {
             path_wide.as_ptr(),     // 输入路径
             full_path.len() as u32, // 输出缓冲区大小
             full_path.as_mut_ptr(), // 输出缓冲区
-            ptr::null_mut(),        // 不需要文件名部分
+            std::ptr::null_mut(),        // 不需要文件名部分
         )
     };
     if len == 0 {
@@ -310,7 +310,7 @@ fn get_volume_mount_point(path: &str) -> WinResult<String> {
 
 // 重新初始化卷映射表
 // 返回操作结果（成功包含映射数量，失败包含错误信息）
-/// Reinitializes the volume mapping table by rebuilding it from the system.
+/// Re-initializes the volume mapping table by rebuilding it from the system.
 ///
 /// # Returns
 /// - `Ok(usize)`: Number of volume mappings found
@@ -340,6 +340,78 @@ pub fn reinitialize_volume_map() -> Result<usize, io::Error> {
     Ok(count)
 }
 
+/// Resolves the device path of volume for a given file system path.
+///
+/// # Arguments
+/// * `path` - The file system path to resolve (can be absolute or relative)
+///
+/// # Returns
+/// - `Some(String)`: The device path in the format
+///   `\\?\Volume{xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}\`
+/// - `None`: If the path cannot be resolved or the volume mapping is not found
+///
+/// # Errors
+/// This function may return `None` in the following cases:
+/// - The input path is invalid or inaccessible
+/// - The volume map has not been properly initialized
+/// - The path does not match any known mount points
+///
+/// # Example
+/// ```rust
+/// use samevol::resolve_device_path;
+///
+/// let path = r"C:\Windows\System32\drivers\etc\hosts";
+/// let device_path = resolve_device_path(path).expect("Failed to resolve volume");
+/// println!("Device path: {}", device_path);
+/// ```
+///
+/// # Notes
+/// - The function uses the global volume map initialized at startup
+/// - For relative paths, the current working directory is used as the base
+/// - The returned device path includes the `\\?\` prefix and trailing backslash
+pub fn resolve_device_path(path: &str) -> Option<String> {
+    use std::borrow::Cow;
+    use std::env;
+    use std::path::Path;
+
+    // 如果路径是相对的，获取当前工作目录并拼接为绝对路径
+    let abs_path: Cow<'_, str> = if Path::new(path).is_relative() {
+        // 获取当前工作目录
+        let current_dir = env::current_dir().ok()?;
+
+        // 拼接为绝对路径
+        let current_dir_string = current_dir.join(path).to_str()?.to_string();
+
+        println!("{}", current_dir_string);
+
+        // 使用 Cow::Owned 转移所有权，避免不必要的内存分配
+        Cow::Owned(current_dir_string)
+    } else { // 是绝对路径，可直接使用
+        path.into()
+    };
+
+    // 获取挂载点路径
+    let mount_point = match get_volume_mount_point(&abs_path) {
+        Ok(m) => m,
+        Err(_) => return None,
+    };
+
+    // 获取锁并访问映射表
+    let map = VOLUME_MAP.lock().ok()?;
+
+    // 查找所有可能的前缀匹配项
+    let candidates = map.keys()
+        .filter(|k| mount_point.starts_with(*k))
+        .collect::<Vec<_>>();
+
+    // 选择最长匹配的挂载点路径（最精确的父路径）
+    let mount_path = candidates.iter()
+        .max_by_key(|k| k.len())?;
+
+    // 获取对应的设备路径
+    map.get(*mount_path).cloned()
+}
+
 /// Checks if two paths reside on the same volume.
 ///
 /// # Arguments
@@ -352,7 +424,7 @@ pub fn reinitialize_volume_map() -> Result<usize, io::Error> {
 /// # Implementation Details
 /// 1. Resolves each path's mount point
 /// 2. Finds the longest matching mount point path in the volume map
-/// 3. Compares the underlying volume GUIDs
+/// 3. Compares the underlying device paths
 /// 
 /// # Example
 /// ```rust
@@ -364,33 +436,9 @@ pub fn reinitialize_volume_map() -> Result<usize, io::Error> {
 /// println!("Same volume? {}", is_same_vol(path1, path2)); // false
 /// ```
 pub fn is_same_vol(path1: &str, path2: &str) -> bool {
-    // 解析路径到卷GUID的闭包
-    let resolve_volume = |path: &str| -> Option<String> {
-        // 获取挂载点路径
-        let mount_point = match get_volume_mount_point(path) {
-            Ok(m) => m,
-            Err(_) => return None,
-        };
-
-        // 获取锁并访问映射表
-        let map = VOLUME_MAP.lock().ok()?;
-
-        // 查找所有可能的前缀匹配项
-        let candidates = map.keys()
-            .filter(|k| mount_point.starts_with(*k))
-            .collect::<Vec<_>>();
-
-        // 选择最长匹配的挂载点路径（最精确的父路径）
-        let mount_path = candidates.iter()
-            .max_by_key(|k| k.len())?;
-
-        // 获取对应的卷 GUID
-        map.get(*mount_path).cloned()
-    };
-
-    // 比较两个路径的卷GUID
-    let vol1 = resolve_volume(path1);
-    let vol2 = resolve_volume(path2);
+    // 比较两个路径所在卷的设备路径 (device path)
+    let vol1 = resolve_device_path(path1);
+    let vol2 = resolve_device_path(path2);
 
     vol1.zip(vol2).is_some_and(|(v1, v2)| v1 == v2)
 }
