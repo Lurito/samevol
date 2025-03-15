@@ -1,7 +1,7 @@
-/**
+/*
  * Copyright 2025 爱佐 (Ayrzo)
  *
- * This file is part of cargo crate samevol (https://docs.rs/samevol),
+ * This file is part of cargo crate samevol (https://crates.io/crates/samevol),
  * which licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
