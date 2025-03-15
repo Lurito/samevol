@@ -243,7 +243,7 @@ fn build_volume_map() -> WinResult<HashMap<String, String>> {
                 // 规范化路径格式：统一使用反斜杠并确保结尾反斜杠
                 let normalized_path = path.replace('/', "\\");
                 let key = if !normalized_path.ends_with('\\') {
-                    format!("{}\\", normalized_path)  // 追加反斜杠用于前缀匹配
+                    format!("{}\\", normalized_path) // 追加反斜杠用于前缀匹配
                 } else {
                     normalized_path
                 };
@@ -257,10 +257,11 @@ fn build_volume_map() -> WinResult<HashMap<String, String>> {
 
         // 获取下一个卷
         let next = unsafe {
-            buffer.fill(0);  // 清空缓冲区
+            buffer.fill(0); // 清空缓冲区
             winapi::FindNextVolumeW(handle, buffer.as_mut_ptr(), buffer.len() as u32)
         };
-        if next == 0 {  // 枚举完成或出错
+        if next == 0 {
+            // 枚举完成或出错
             break;
         }
     }
@@ -283,7 +284,7 @@ fn get_volume_mount_point(path: &str) -> WinResult<String> {
             path_wide.as_ptr(),     // 输入路径
             full_path.len() as u32, // 输出缓冲区大小
             full_path.as_mut_ptr(), // 输出缓冲区
-            std::ptr::null_mut(),        // 不需要文件名部分
+            std::ptr::null_mut(),   // 不需要文件名部分
         )
     };
     if len == 0 {
