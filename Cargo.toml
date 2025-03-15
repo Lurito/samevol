@@ -2,7 +2,7 @@
 name = "samevol"
 description = "A lightweight Windows utility for determining if two paths reside on the same storage volume. 轻量级 Windows 工具库，用于检测两个路径是否位于同一存储卷。"
 authors = ["爱佐 (Ayrzo) <ayrzo@lurito.cn>"]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 build = "build.rs"
 publish = true

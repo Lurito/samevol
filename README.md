@@ -3,7 +3,7 @@
 [<img alt="github" src="https://img.shields.io/badge/github-Lurito/samevol-ee80a9?style=for-the-badge&labelColor=555555&logo=github" height="20">](https://github.com/Lurito/samevol)
 [<img alt="crates.io" src="https://img.shields.io/crates/v/samevol.svg?style=for-the-badge&color=f09d13&logo=rust" height="20">](https://crates.io/crates/samevol)
 [<img alt="docs.rs" src="https://img.shields.io/badge/docs.rs-samevol-66c2a5?style=for-the-badge&labelColor=555555&logo=docs.rs" height="20">](https://docs.rs/samevol)
-[<img alt="docs.rs" src="https://img.shields.io/crates/l/samevol?color=d22128&style=for-the-badge&logo=apache" height="20">](./LICENSE)
+[<img alt="docs.rs" src="https://img.shields.io/crates/l/samevol/0.1.1?color=d22128&style=for-the-badge&logo=apache" height="20">](./LICENSE)
 
 > 使用中文的开发者可以跳转至下方的[中文文档](#同一存储卷检查器)。
 
@@ -81,7 +81,7 @@ AI usage notice: Portions of the codebase, comments, and documentation were writ
 [<img alt="github" src="https://img.shields.io/badge/github-Lurito/samevol-ee80a9?style=for-the-badge&labelColor=555555&logo=github" height="20">](https://github.com/Lurito/samevol)
 [<img alt="crates.io" src="https://img.shields.io/crates/v/samevol.svg?style=for-the-badge&color=f09d13&logo=rust" height="20">](https://crates.io/crates/samevol)
 [<img alt="docs.rs" src="https://img.shields.io/badge/docs.rs-samevol-66c2a5?style=for-the-badge&labelColor=555555&logo=docs.rs" height="20">](https://docs.rs/samevol)
-[<img alt="docs.rs" src="https://img.shields.io/crates/l/samevol?color=d22128&style=for-the-badge&logo=apache" height="20">](./LICENSE)
+[<img alt="docs.rs" src="https://img.shields.io/crates/l/samevol/0.1.1?color=d22128&style=for-the-badge&logo=apache" height="20">](./LICENSE)
 
 轻量级 Windows 工具库，用于检测两个路径是否位于同一存储卷。
 
